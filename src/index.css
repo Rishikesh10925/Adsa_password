@@ -95,6 +95,33 @@ h1 {
   line-height: 1.55;
 }
 
+.navTabs {
+  margin: 16px 0 14px;
+  display: inline-flex;
+  background: #ecf3ff;
+  border: 1px solid #cfe0fb;
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+}
+
+.navTabBtn {
+  border: 0;
+  background: transparent;
+  color: #355f99;
+  border-radius: 9px;
+  padding: 9px 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.navTabBtn.active {
+  background: #ffffff;
+  color: #0f4ca8;
+  box-shadow: 0 4px 10px rgba(27, 71, 130, 0.16);
+}
+
 .inputPanel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -190,6 +217,35 @@ h1 {
   margin-top: 15px;
 }
 
+.generatorCard {
+  margin-top: 12px;
+  border: 1px solid #c8d7ee;
+  background: linear-gradient(160deg, #f4f8ff 0%, #f8fcff 100%);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.generatorTitle {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-500);
+  font-weight: 600;
+}
+
+.generatorValue {
+  margin: 8px 0;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+  color: var(--ink-900);
+}
+
+.generatorActions {
+  display: flex;
+  gap: 10px;
+}
+
 .btn {
   border: 1px solid transparent;
   border-radius: 10px;
@@ -214,6 +270,16 @@ h1 {
   background: var(--accent-dark);
 }
 
+.btn.secondary {
+  border-color: #bed4fd;
+  background: #e8f1ff;
+  color: #0f4ca8;
+}
+
+.btn.secondary:hover {
+  background: #dce9ff;
+}
+
 .btn.ghost {
   border-color: #bfd0ed;
   background: #edf3ff;
@@ -234,6 +300,72 @@ h1 {
   margin-top: 22px;
   padding-top: 6px;
   animation: riseIn 0.45s ease-out;
+}
+
+.conceptPage {
+  animation: riseIn 0.45s ease-out;
+  display: grid;
+  gap: 14px;
+}
+
+.conceptIntro {
+  background: #f8fbff;
+  border: 1px solid #dbe6f9;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.conceptIntro h2 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+}
+
+.conceptIntro p {
+  margin: 0;
+  color: var(--ink-700);
+}
+
+.conceptGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.conceptCard {
+  background: #ffffff;
+  border: 1px solid #d9e4f6;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.conceptCard h3 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  font-size: 1.02rem;
+}
+
+.conceptCard p {
+  margin: 0 0 8px;
+  color: var(--ink-700);
+}
+
+.conceptCard.wide {
+  grid-column: 1 / -1;
+}
+
+.monoText {
+  background: #f2f7ff;
+  color: #143c77;
+  border: 1px solid #d7e4fc;
+  border-radius: 8px;
+  padding: 8px;
+  font-family: Consolas, "Courier New", monospace;
+  margin-bottom: 0;
+}
+
+.conceptTableWrap {
+  margin-top: 8px;
+  overflow-x: auto;
 }
 
 .dashboardBand {
@@ -498,6 +630,20 @@ tbody tr:hover {
   font-weight: 600;
 }
 
+.entropyBlock {
+  display: grid;
+  gap: 2px;
+}
+
+.entropyBlock strong {
+  color: var(--ink-900);
+}
+
+.entropyBlock span {
+  color: var(--ink-500);
+  font-size: 0.84rem;
+}
+
 .suggestionText {
   font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
   font-weight: 600;
@@ -531,6 +677,18 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .conceptGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .navTabs {
+    width: 100%;
+  }
+
+  .navTabBtn {
+    flex: 1;
+  }
+
   .dashboardBand {
     grid-template-columns: 1fr;
   }
@@ -544,6 +702,10 @@ tbody tr:hover {
   }
 
   .actions {
+    flex-direction: column;
+  }
+
+  .generatorActions {
     flex-direction: column;
   }
 

@@ -5,10 +5,15 @@ const LOWER_REGEX = /[a-z]/;
 const UPPER_REGEX = /[A-Z]/;
 const DIGIT_REGEX = /\d/;
 const REPEATING_REGEX = /(.)\1{2,}/;
-const ONLY_LOWERCASE_REGEX = /^[a-z]+$/;
-const SEQUENTIAL_NUMBERS_REGEX = /012|123|234|345|456|567|678|789/;
+const SEQUENTIAL_REGEX = /(012|123|234|345|456|567|678|789|987|876|765|654|543|432|321|210)/;
 
-const COMMON_PASSWORDS = ["password", "123456", "admin", "qwerty", "abc123"];
+const COMMON_PASSWORD_LIST = ["password", "123456", "admin", "qwerty", "abc123"];
+
+// Hash map usage: O(1)-style lookup for known weak passwords.
+const COMMON_PASSWORD_MAP = COMMON_PASSWORD_LIST.reduce((accumulator, password) => {
+  accumulator[password] = true;
+  return accumulator;
+}, {});
 
 const replacementMap = {
   a: "@",
@@ -19,19 +24,51 @@ const replacementMap = {
   t: "7",
 };
 
-const randomPool = "!@#$%&*X9Z7Q";
+const uppercaseChars = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const lowercaseChars = "abcdefghijkmnopqrstuvwxyz";
+const numberChars = "23456789";
+const symbolChars = "!@#$%^&*-_=+?";
 
-const getRandomChars = (length) => {
-  let output = "";
-  for (let index = 0; index < length; index += 1) {
-    const pick = Math.floor(Math.random() * randomPool.length);
-    output += randomPool[pick];
+const getSecureRandomInt = (max) => {
+  if (window.crypto?.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return array[0] % max;
   }
-  return output;
+  return Math.floor(Math.random() * max);
+};
+
+const pickRandom = (pool) => pool[getSecureRandomInt(pool.length)];
+
+const shuffleString = (value) => {
+  const chars = value.split("");
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = getSecureRandomInt(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+};
+
+const generateStrongPassword = (length = 14) => {
+  const safeLength = Math.max(12, length);
+  const pool = `${uppercaseChars}${lowercaseChars}${numberChars}${symbolChars}`;
+
+  const output = [
+    pickRandom(uppercaseChars),
+    pickRandom(lowercaseChars),
+    pickRandom(numberChars),
+    pickRandom(symbolChars),
+  ];
+
+  while (output.length < safeLength) {
+    output.push(pickRandom(pool));
+  }
+
+  return shuffleString(output.join(""));
 };
 
 const getPattern = (password) => {
-  // Pattern logic: normalize each character into its structural token.
+  // Pattern logic: normalize each character into structural tokens.
   return password
     .split("")
     .map((character) => {
@@ -43,86 +80,94 @@ const getPattern = (password) => {
     .join("");
 };
 
-const getRiskSignals = (password) => {
-  // Pattern detection: identify common weak structures and predictable sequences.
-  const normalized = password.toLowerCase();
-  const signals = [];
+const getCharsetSize = (password) => {
+  let size = 0;
+  if (LOWER_REGEX.test(password)) size += 26;
+  if (UPPER_REGEX.test(password)) size += 26;
+  if (DIGIT_REGEX.test(password)) size += 10;
+  if (SPECIAL_REGEX.test(password)) size += 32;
+  return size || 1;
+};
 
-  if (ONLY_LOWERCASE_REGEX.test(password)) {
-    signals.push("Only lowercase letters (low complexity)");
-  }
+const getEntropyBits = (password) => {
+  const charsetSize = getCharsetSize(password);
+  return password.length * Math.log2(charsetSize);
+};
 
-  if (SEQUENTIAL_NUMBERS_REGEX.test(normalized)) {
-    signals.push("Sequential numbers found (e.g., 123)");
-  }
+const getEntropyLabel = (entropyBits) => {
+  if (entropyBits < 28) return "Low entropy";
+  if (entropyBits < 45) return "Moderate entropy";
+  if (entropyBits < 60) return "Good entropy";
+  return "High entropy";
+};
 
-  if (REPEATING_REGEX.test(normalized)) {
-    signals.push("Repeating characters detected");
-  }
-
-  return signals;
+const getCrackTimeEstimate = ({ entropyBits, isCommonPassword, hasRepeating, hasSequential }) => {
+  if (isCommonPassword) return "Instantly";
+  if (entropyBits < 28 || hasRepeating || hasSequential) return "Seconds";
+  if (entropyBits < 50) return "Hours";
+  return "Years";
 };
 
 const getPasswordScore = (password) => {
-  // Strength scoring logic: weighted signals produce a normalized 0-100 score.
-  let rawScore = 0;
-  const reasons = [];
+  // Strength scoring logic: weighted additions + penalties on common weak patterns.
+  let score = 0;
+  const weaknesses = [];
+  const lower = password.toLowerCase();
 
-  const normalized = password.toLowerCase();
-  const isCommonPassword = COMMON_PASSWORDS.includes(normalized);
-  const hasNumbers = DIGIT_REGEX.test(password);
+  const isCommonPassword = Boolean(COMMON_PASSWORD_MAP[lower]);
   const hasUppercase = UPPER_REGEX.test(password);
   const hasLowercase = LOWER_REGEX.test(password);
-  const hasSpecial = SPECIAL_REGEX.test(password);
-  const hasRepeatingCharacters = REPEATING_REGEX.test(normalized);
+  const hasNumbers = DIGIT_REGEX.test(password);
+  const hasSymbols = SPECIAL_REGEX.test(password);
+  const hasRepeating = REPEATING_REGEX.test(lower);
+  const hasSequential = SEQUENTIAL_REGEX.test(lower);
 
-  if (password.length >= 8) {
-    rawScore += 20;
+  if (password.length >= 12) {
+    score += 30;
+  } else if (password.length >= 8) {
+    score += 20;
   } else {
-    reasons.push("Length is below 8 characters.");
+    weaknesses.push("Too short (minimum 8 characters recommended)");
   }
 
-  if (hasUppercase) {
-    rawScore += 10;
-  } else {
-    reasons.push("No uppercase letter found.");
+  if (hasUppercase) score += 15;
+  else weaknesses.push("No uppercase letter");
+
+  if (hasLowercase) score += 15;
+  else weaknesses.push("No lowercase letter");
+
+  if (hasNumbers) score += 15;
+  else weaknesses.push("No numbers");
+
+  if (hasSymbols) score += 15;
+  else weaknesses.push("No symbols");
+
+  if (hasRepeating) {
+    score -= 15;
+    weaknesses.push("Repeating characters detected");
   }
 
-  if (hasLowercase) {
-    rawScore += 10;
-  } else {
-    reasons.push("No lowercase letter found.");
-  }
-
-  if (hasNumbers) {
-    rawScore += 10;
-  } else {
-    reasons.push("No number found.");
-  }
-
-  if (hasSpecial) {
-    rawScore += 15;
-  } else {
-    reasons.push("No special character found.");
-  }
-
-  if (hasRepeatingCharacters) {
-    rawScore -= 15;
-    reasons.push("Repeated characters reduce unpredictability.");
+  if (hasSequential) {
+    score -= 10;
+    weaknesses.push("Sequential pattern detected");
   }
 
   if (isCommonPassword) {
-    rawScore -= 30;
-    reasons.push("This is a known common password.");
+    score -= 35;
+    weaknesses.push("Common password found in breach dictionaries");
   }
 
-  const normalizedScore = Math.max(0, Math.min(100, Math.round((rawScore / 65) * 100)));
+  const normalizedScore = Math.max(0, Math.min(100, Math.round(score)));
+  const entropyBits = getEntropyBits(password);
 
   return {
     score: normalizedScore,
-    rawScore,
-    reasons,
+    entropyBits,
+    entropyLabel: getEntropyLabel(entropyBits),
+    weaknesses,
     isCommonPassword,
+    hasRepeating,
+    hasSequential,
   };
 };
 
@@ -133,48 +178,26 @@ const getStrengthLabel = (score) => {
   return "Strong";
 };
 
-const getCrackTimeEstimate = (strengthLabel) => {
-  if (strengthLabel === "Very weak") return "Instantly";
-  if (strengthLabel === "Weak") return "Few seconds";
-  if (strengthLabel === "Medium") return "Hours";
-  return "Years";
-};
-
 const suggestStrongerPassword = (password) => {
-  let transformed = password
+  const base = password
     .split("")
     .map((character) => {
       const lower = character.toLowerCase();
-      if (replacementMap[lower]) {
-        return Math.random() > 0.5 ? replacementMap[lower] : character;
-      }
-      return character;
+      return replacementMap[lower] ?? character;
     })
     .join("");
 
-  if (transformed.length > 0) {
-    transformed = `${transformed[0].toUpperCase()}${transformed.slice(1)}`;
-  } else {
-    transformed = "Secure";
+  let upgraded = base.length > 0 ? `${base[0].toUpperCase()}${base.slice(1)}` : "Secure";
+
+  if (!DIGIT_REGEX.test(upgraded)) upgraded += pickRandom(numberChars);
+  if (!SPECIAL_REGEX.test(upgraded)) upgraded += pickRandom(symbolChars);
+  if (!UPPER_REGEX.test(upgraded)) upgraded = `R${upgraded}`;
+
+  while (upgraded.length < 10) {
+    upgraded += pickRandom(`${lowercaseChars}${numberChars}${symbolChars}`);
   }
 
-  if (!SPECIAL_REGEX.test(transformed)) {
-    transformed += "@";
-  }
-
-  if (!DIGIT_REGEX.test(transformed)) {
-    transformed += String(Math.floor(Math.random() * 90) + 10);
-  }
-
-  if (!UPPER_REGEX.test(transformed)) {
-    transformed = `R${transformed}`;
-  }
-
-  if (transformed.length < 8) {
-    transformed += getRandomChars(8 - transformed.length);
-  }
-
-  return transformed;
+  return shuffleString(upgraded);
 };
 
 const analyzePasswords = (inputText) => {
@@ -183,28 +206,28 @@ const analyzePasswords = (inputText) => {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  // Hash map usage: object stores pattern counts as { pattern: frequency }.
+  // Hash map usage: stores pattern occurrence counts { pattern: frequency }.
   const patternFrequencyMap = {};
 
   const rows = passwords.map((password) => {
     const pattern = getPattern(password);
-    const riskSignals = getRiskSignals(password);
-    const { score, reasons, isCommonPassword } = getPasswordScore(password);
-    const strengthLabel = getStrengthLabel(score);
-    const crackTime = getCrackTimeEstimate(strengthLabel);
+    const analysis = getPasswordScore(password);
+    const strengthLabel = getStrengthLabel(analysis.score);
+    const crackTime = getCrackTimeEstimate(analysis);
 
     patternFrequencyMap[pattern] = (patternFrequencyMap[pattern] || 0) + 1;
 
     return {
       password,
       pattern,
-      score,
+      score: analysis.score,
       strengthLabel,
       crackTime,
-      riskSignals,
-      reasons,
-      isCommonPassword,
-      isRisky: riskSignals.length > 0 || isCommonPassword,
+      entropyBits: analysis.entropyBits,
+      entropyLabel: analysis.entropyLabel,
+      weaknesses: analysis.weaknesses,
+      isCommonPassword: analysis.isCommonPassword,
+      isRisky: analysis.weaknesses.length > 0,
       suggestion: suggestStrongerPassword(password),
     };
   });
@@ -314,6 +337,8 @@ function App() {
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
   const [importStatus, setImportStatus] = useState("");
+  const [generatedPassword, setGeneratedPassword] = useState(generateStrongPassword());
+  const [activeView, setActiveView] = useState("analyzer");
 
   const appendPasswordsToInput = (passwords) => {
     if (passwords.length === 0) {
@@ -424,6 +449,18 @@ function App() {
     setResult(null);
   };
 
+  const handleGeneratePassword = () => {
+    setGeneratedPassword(generateStrongPassword());
+  };
+
+  const handleUseGeneratedPassword = () => {
+    setInputText((previous) => {
+      const prefix = previous.trim() ? `${previous.trim()}\n` : "";
+      return `${prefix}${generatedPassword}`;
+    });
+    setImportStatus("Generated strong password added to input.");
+  };
+
   const patternEntries = useMemo(
     () => (result ? Object.entries(result.patternFrequencyMap) : []),
     [result]
@@ -451,6 +488,9 @@ function App() {
       weakCount: result.rows.filter(
         (row) => row.strengthLabel === "Weak" || row.strengthLabel === "Very weak"
       ).length,
+      averageEntropy: result.rows.length
+        ? Math.round(result.rows.reduce((sum, row) => sum + row.entropyBits, 0) / result.rows.length)
+        : 0,
     };
   }, [result]);
 
@@ -473,210 +513,337 @@ function App() {
           </p>
         </header>
 
-        <section className="inputPanel">
-          <label htmlFor="passwordInput" className="label">
-            Password List (one per line)
-          </label>
-          <textarea
-            id="passwordInput"
-            className="textarea"
-            rows={10}
-            placeholder="Example:\nrihsii\npassword\nRishi@123"
-            value={inputText}
-            onChange={(event) => setInputText(event.target.value)}
-          />
+        <nav className="navTabs" aria-label="Main navigation">
+          <button
+            type="button"
+            className={`navTabBtn ${activeView === "analyzer" ? "active" : ""}`}
+            onClick={() => setActiveView("analyzer")}
+          >
+            Analyzer
+          </button>
+          <button
+            type="button"
+            className={`navTabBtn ${activeView === "concept" ? "active" : ""}`}
+            onClick={() => setActiveView("concept")}
+          >
+            ADSA Concept Page
+          </button>
+        </nav>
 
-          <div className="uploadGrid">
-            <label className="uploadCard" htmlFor="docUpload">
-              <span className="uploadTitle">Upload Document</span>
-              <span className="uploadHint">Supports .txt, .csv, .json, .docx</span>
-              <input
-                id="docUpload"
-                type="file"
-                className="fileInput"
-                accept=".txt,.csv,.json,.doc,.docx"
-                onChange={handleDocumentUpload}
+        {activeView === "analyzer" ? (
+          <>
+            <section className="inputPanel">
+              <label htmlFor="passwordInput" className="label">
+                Password List (one per line)
+              </label>
+              <textarea
+                id="passwordInput"
+                className="textarea"
+                rows={10}
+                placeholder="Example:\nrihsii\npassword\nRishi@123"
+                value={inputText}
+                onChange={(event) => setInputText(event.target.value)}
               />
-            </label>
 
-            <label className="uploadCard" htmlFor="googleUpload">
-              <span className="uploadTitle">Import Google Password CSV</span>
-              <span className="uploadHint">Use CSV export from Google Password Manager</span>
-              <input
-                id="googleUpload"
-                type="file"
-                className="fileInput"
-                accept=".csv"
-                onChange={handleGoogleCsvUpload}
-              />
-            </label>
-          </div>
+              <div className="uploadGrid">
+                <label className="uploadCard" htmlFor="docUpload">
+                  <span className="uploadTitle">Upload Document</span>
+                  <span className="uploadHint">Supports .txt, .csv, .json, .docx</span>
+                  <input
+                    id="docUpload"
+                    type="file"
+                    className="fileInput"
+                    accept=".txt,.csv,.json,.doc,.docx"
+                    onChange={handleDocumentUpload}
+                  />
+                </label>
 
-          <p className="privacyNote">
-            Direct access to saved Google/Chrome passwords is blocked by browser security.
-            Import works via exported CSV file only.
-          </p>
-
-          {importStatus && <p className="importStatus">{importStatus}</p>}
-
-          {error && <p className="error">{error}</p>}
-
-          <div className="actions">
-            <button type="button" className="btn primary" onClick={handleAnalyze}>
-              Analyze Security
-            </button>
-            <button type="button" className="btn ghost" onClick={handleClear}>
-              Clear Input
-            </button>
-          </div>
-        </section>
-
-        {result && (
-          <section className="results">
-            <div className="sectionHeader">
-              <h2>Audit Summary</h2>
-              <span className="statusChip">Live Assessment</span>
-            </div>
-
-            <div className="dashboardBand">
-              <div className="statsGrid">
-                <article className="statCard">
-                  <p className="statLabel">Total Passwords</p>
-                  <p className="statValue">{result.totalPasswords}</p>
-                </article>
-                <article className="statCard">
-                  <p className="statLabel">Most Common Pattern</p>
-                  <p className="statValue compact">{result.mostCommonPattern}</p>
-                  {result.highestFrequency > 0 && (
-                    <p className="statMeta">Appears {result.highestFrequency} times</p>
-                  )}
-                </article>
-                <article className="statCard">
-                  <p className="statLabel">Risky Passwords</p>
-                  <p className="statValue">{overview.riskyCount}</p>
-                  <p className="statMeta">Need urgent fixes</p>
-                </article>
-                <article className="statCard">
-                  <p className="statLabel">Strong Passwords</p>
-                  <p className="statValue">{overview.strongCount}</p>
-                  <p className="statMeta">Healthy credentials</p>
-                </article>
+                <label className="uploadCard" htmlFor="googleUpload">
+                  <span className="uploadTitle">Import Google Password CSV</span>
+                  <span className="uploadHint">Use CSV export from Google Password Manager</span>
+                  <input
+                    id="googleUpload"
+                    type="file"
+                    className="fileInput"
+                    accept=".csv"
+                    onChange={handleGoogleCsvUpload}
+                  />
+                </label>
               </div>
 
-              <aside className="postureCard">
-                <p className="statLabel">Security Posture</p>
-                <div
-                  className="scoreDial"
-                  style={{
-                    background: `conic-gradient(#0f6fff ${overview.averageScore * 3.6}deg, #dce7fa 0deg)`,
-                  }}
-                >
-                  <div className="scoreDialInner">
-                    <strong>{overview.averageScore}</strong>
-                    <span>/100</span>
-                  </div>
+              <p className="privacyNote">
+                Direct access to saved Google/Chrome passwords is blocked by browser security.
+                Import works via exported CSV file only.
+              </p>
+
+              <div className="generatorCard">
+                <p className="generatorTitle">Strong Password Generator</p>
+                <p className="generatorValue">{generatedPassword}</p>
+                <div className="generatorActions">
+                  <button type="button" className="btn secondary" onClick={handleGeneratePassword}>
+                    Generate New
+                  </button>
+                  <button type="button" className="btn ghost" onClick={handleUseGeneratedPassword}>
+                    Use in Input
+                  </button>
                 </div>
-                <p className="statMeta">Weak or very weak: {overview.weakCount}</p>
-              </aside>
+              </div>
+
+              {importStatus && <p className="importStatus">{importStatus}</p>}
+
+              {error && <p className="error">{error}</p>}
+
+              <div className="actions">
+                <button type="button" className="btn primary" onClick={handleAnalyze}>
+                  Analyze Security
+                </button>
+                <button type="button" className="btn ghost" onClick={handleClear}>
+                  Clear Input
+                </button>
+              </div>
+            </section>
+
+            {result && (
+              <section className="results">
+                <div className="sectionHeader">
+                  <h2>Audit Summary</h2>
+                  <span className="statusChip">Live Assessment</span>
+                </div>
+
+                <div className="dashboardBand">
+                  <div className="statsGrid">
+                    <article className="statCard">
+                      <p className="statLabel">Total Passwords</p>
+                      <p className="statValue">{result.totalPasswords}</p>
+                    </article>
+                    <article className="statCard">
+                      <p className="statLabel">Most Common Pattern</p>
+                      <p className="statValue compact">{result.mostCommonPattern}</p>
+                      {result.highestFrequency > 0 && (
+                        <p className="statMeta">Appears {result.highestFrequency} times</p>
+                      )}
+                    </article>
+                    <article className="statCard">
+                      <p className="statLabel">Risky Passwords</p>
+                      <p className="statValue">{overview.riskyCount}</p>
+                      <p className="statMeta">Need urgent fixes</p>
+                    </article>
+                    <article className="statCard">
+                      <p className="statLabel">Strong Passwords</p>
+                      <p className="statValue">{overview.strongCount}</p>
+                      <p className="statMeta">Healthy credentials</p>
+                    </article>
+                    <article className="statCard">
+                      <p className="statLabel">Average Entropy</p>
+                      <p className="statValue">{overview.averageEntropy} bits</p>
+                      <p className="statMeta">Higher is harder to crack</p>
+                    </article>
+                  </div>
+
+                  <aside className="postureCard">
+                    <p className="statLabel">Security Posture</p>
+                    <div
+                      className="scoreDial"
+                      style={{
+                        background: `conic-gradient(#0f6fff ${overview.averageScore * 3.6}deg, #dce7fa 0deg)`,
+                      }}
+                    >
+                      <div className="scoreDialInner">
+                        <strong>{overview.averageScore}</strong>
+                        <span>/100</span>
+                      </div>
+                    </div>
+                    <p className="statMeta">Weak or very weak: {overview.weakCount}</p>
+                  </aside>
+                </div>
+
+                <section className="panelCard">
+                  <h3 className="sectionTitle">Pattern Frequency (Hash Map Output)</h3>
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Pattern</th>
+                          <th>Frequency</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {patternEntries.map(([pattern, count]) => (
+                          <tr
+                            key={pattern}
+                            className={
+                              pattern === result.mostCommonPattern ? "highlightRow" : ""
+                            }
+                          >
+                            <td>{pattern}</td>
+                            <td>{count}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <section className="panelCard">
+                  <h3 className="sectionTitle">Detailed Password Review</h3>
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Input Password</th>
+                          <th>Pattern</th>
+                          <th>Score</th>
+                          <th>Strength</th>
+                          <th>Crack Time</th>
+                          <th>Entropy</th>
+                          <th>Weaknesses</th>
+                          <th>Suggested Strong Password</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.rows.map((row) => (
+                          <tr
+                            key={`${row.password}-${row.suggestion}`}
+                            className={row.isRisky ? "riskyRow" : ""}
+                          >
+                            <td className={row.isRisky ? "weakPassword" : ""}>{row.password}</td>
+                            <td>{row.pattern}</td>
+                            <td>
+                              <div className="scoreBlock">
+                                <span className="scoreValue">{row.score}/100</span>
+                                <div className="strengthBarTrack">
+                                  <div
+                                    className={`strengthBarFill ${strengthClassMap[row.strengthLabel]}`}
+                                    style={{ width: `${row.score}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`strengthBadge ${strengthClassMap[row.strengthLabel]}`}>
+                                {row.strengthLabel}
+                              </span>
+                            </td>
+                            <td>{row.crackTime}</td>
+                            <td>
+                              <div className="entropyBlock">
+                                <strong>{Math.round(row.entropyBits)} bits</strong>
+                                <span>{row.entropyLabel}</span>
+                              </div>
+                            </td>
+                            <td>
+                              {row.weaknesses.length > 0 ? (
+                                <ul className="inlineList">
+                                  {row.weaknesses.map((reason) => (
+                                    <li key={reason}>{reason}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <span className="positiveText">Looks good</span>
+                              )}
+                            </td>
+                            <td className="suggestionText">{row.suggestion}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              </section>
+            )}
+          </>
+        ) : (
+          <section className="conceptPage">
+            <div className="conceptIntro">
+              <h2>ADSA Concept Behind This Project</h2>
+              <p>
+                This project is a practical ADSA case-study where strings are transformed,
+                grouped, and analyzed using data structures and algorithms to evaluate
+                password security quality.
+              </p>
             </div>
 
-            <section className="panelCard">
-              <h3 className="sectionTitle">Pattern Frequency (Hash Map Output)</h3>
-              <div className="tableWrap">
+            <div className="conceptGrid">
+              <article className="conceptCard">
+                <h3>1. Hash Map Usage</h3>
+                <p>
+                  We use JavaScript objects as hash maps to track pattern frequencies and to
+                  perform fast lookup for common passwords.
+                </p>
+                <p className="monoText">patternFrequencyMap[pattern] = (count || 0) + 1</p>
+              </article>
+
+              <article className="conceptCard">
+                <h3>2. String Processing Pipeline</h3>
+                <p>
+                  Each password is scanned character-by-character and mapped into a structural
+                  token format: uppercase to A, lowercase to a, digit to #, symbol to @.
+                </p>
+                <p className="monoText">Rishi@123 -&gt; Aaaaa@###</p>
+              </article>
+
+              <article className="conceptCard">
+                <h3>3. Rule-Based Scoring Algorithm</h3>
+                <p>
+                  Weighted scoring uses additive rewards (length/diversity) and penalties
+                  (repetition/sequences/common passwords) to compute a 0 to 100 score.
+                </p>
+              </article>
+
+              <article className="conceptCard">
+                <h3>4. Entropy Estimation</h3>
+                <p>
+                  Entropy approximates unpredictability using charset size and password length:
+                </p>
+                <p className="monoText">Entropy = length * log2(charsetSize)</p>
+              </article>
+            </div>
+
+            <section className="conceptCard wide">
+              <h3>Time Complexity Discussion (ADSA)</h3>
+              <div className="conceptTableWrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>Pattern</th>
-                      <th>Frequency</th>
+                      <th>Operation</th>
+                      <th>Complexity</th>
+                      <th>Reason</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {patternEntries.map(([pattern, count]) => (
-                      <tr
-                        key={pattern}
-                        className={
-                          pattern === result.mostCommonPattern ? "highlightRow" : ""
-                        }
-                      >
-                        <td>{pattern}</td>
-                        <td>{count}</td>
-                      </tr>
-                    ))}
+                    <tr>
+                      <td>Pattern Generation</td>
+                      <td>O(L)</td>
+                      <td>Single pass over password characters</td>
+                    </tr>
+                    <tr>
+                      <td>Frequency Counting</td>
+                      <td>O(N)</td>
+                      <td>One hash-map update per password</td>
+                    </tr>
+                    <tr>
+                      <td>Common Password Check</td>
+                      <td>O(1)</td>
+                      <td>Hash map lookup by password string key</td>
+                    </tr>
+                    <tr>
+                      <td>Total Analysis</td>
+                      <td>O(N * L)</td>
+                      <td>N passwords, each scanned for multiple string rules</td>
+                    </tr>
                   </tbody>
                 </table>
               </div>
             </section>
 
-            <section className="panelCard">
-              <h3 className="sectionTitle">Detailed Password Review</h3>
-              <div className="tableWrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Input Password</th>
-                      <th>Pattern</th>
-                      <th>Score</th>
-                      <th>Strength</th>
-                      <th>Crack Time</th>
-                      <th>Weak Reasons</th>
-                      <th>Risk Patterns</th>
-                      <th>Suggested Strong Password</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.rows.map((row) => (
-                      <tr
-                        key={`${row.password}-${row.suggestion}`}
-                        className={row.isRisky ? "riskyRow" : ""}
-                      >
-                        <td className={row.isRisky ? "weakPassword" : ""}>{row.password}</td>
-                        <td>{row.pattern}</td>
-                        <td>
-                          <div className="scoreBlock">
-                            <span className="scoreValue">{row.score}/100</span>
-                            <div className="strengthBarTrack">
-                              <div
-                                className={`strengthBarFill ${strengthClassMap[row.strengthLabel]}`}
-                                style={{ width: `${row.score}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`strengthBadge ${strengthClassMap[row.strengthLabel]}`}>
-                            {row.strengthLabel}
-                          </span>
-                        </td>
-                        <td>{row.crackTime}</td>
-                        <td>
-                          {row.reasons.length > 0 ? (
-                            <ul className="inlineList">
-                              {row.reasons.map((reason) => (
-                                <li key={reason}>{reason}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <span className="positiveText">Looks good</span>
-                          )}
-                        </td>
-                        <td>
-                          {row.isCommonPassword && <div className="riskTag">Common password</div>}
-                          {row.riskSignals.length > 0 ? (
-                            <ul className="inlineList">
-                              {row.riskSignals.map((signal) => (
-                                <li key={signal}>{signal}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <span className="positiveText">None</span>
-                          )}
-                        </td>
-                        <td className="suggestionText">{row.suggestion}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <section className="conceptCard wide">
+              <h3>Why This Fits ADSA Coursework</h3>
+              <ul className="inlineList">
+                <li>Demonstrates hash maps for frequency counting and fast dictionary lookup.</li>
+                <li>Applies string algorithms for tokenization, sequence detection, and repetition checks.</li>
+                <li>Transforms theoretical complexity analysis into a real security auditing tool.</li>
+                <li>Combines data structures with practical UI to communicate algorithmic insights clearly.</li>
+              </ul>
             </section>
           </section>
         )}
