@@ -650,6 +650,132 @@ tbody tr:hover {
   color: #194785;
 }
 
+/* ── Download Report Button ── */
+.downloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.downloadIcon {
+  font-size: 1rem;
+}
+
+/* ── Report → Excel Section ── */
+.reportExcelPage {
+  animation: riseIn 0.45s ease-out;
+  display: grid;
+  gap: 16px;
+}
+
+.reportExcelIntro {
+  background: linear-gradient(135deg, #eef5ff 0%, #f4f8ff 100%);
+  border: 1px solid #cfe0fb;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.reportExcelIntro h2 {
+  margin: 0 0 8px;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+}
+
+.reportExcelIntro p {
+  margin: 0;
+  color: var(--ink-700);
+  line-height: 1.55;
+}
+
+.reportUploadZone {
+  display: grid;
+  justify-items: center;
+}
+
+.reportUploadCard {
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  padding: 24px 16px !important;
+  border-width: 2px !important;
+  border-style: dashed !important;
+  border-color: #9bbde8 !important;
+  background: linear-gradient(160deg, #f9fcff, #ffffff) !important;
+  transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+
+.reportUploadCard:hover {
+  border-color: var(--accent) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(15, 111, 255, 0.12);
+}
+
+.uploadIcon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.reportPreview {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+}
+
+.reportStatsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+
+.reportStatPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f2f6fd;
+  border: 1px solid #dbe6f9;
+  border-radius: 10px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+
+.reportStatLabel {
+  color: var(--ink-500);
+  font-weight: 600;
+}
+
+.dangerText {
+  color: var(--danger);
+}
+
+.goodText {
+  color: var(--good);
+}
+
+.reportActions {
+  margin-top: 4px;
+}
+
+.excelBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0f6fff 0%, #0a55c4 100%) !important;
+  font-size: 1rem;
+  padding: 13px 24px !important;
+}
+
+.excelBtn:hover {
+  background: linear-gradient(135deg, #0a55c4 0%, #084a9e 100%) !important;
+}
+
+.excelIcon {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #194785;
+}
+
 @keyframes riseIn {
   from {
     opacity: 0;

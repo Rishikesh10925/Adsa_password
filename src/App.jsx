@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 const SPECIAL_REGEX = /[^A-Za-z0-9]/;
 const LOWER_REGEX = /[a-z]/;
@@ -332,6 +332,39 @@ const readDocxText = async (file) => {
   return result.value || "";
 };
 
+const generateCsvFromReport = (reportData) => {
+  const rows = reportData.rows || [];
+  if (rows.length === 0) return null;
+
+  const escCsv = (value) => {
+    const str = String(value ?? "");
+    if (str.includes('"') || str.includes(',') || str.includes('\n')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const header = ["#", "Existing Password", "Strength", "Score", "Crack Time", "Entropy (bits)", "Weaknesses", "Suggested Password"];
+  const csvRows = [header.join(",")];
+
+  rows.forEach((row, index) => {
+    csvRows.push(
+      [
+        index + 1,
+        escCsv(row.password),
+        escCsv(row.strengthLabel),
+        row.score,
+        escCsv(row.crackTime),
+        Math.round(row.entropyBits),
+        escCsv((row.weaknesses || []).join("; ")),
+        escCsv(row.suggestion),
+      ].join(",")
+    );
+  });
+
+  return csvRows.join("\n");
+};
+
 function App() {
   const [inputText, setInputText] = useState("");
   const [error, setError] = useState("");
@@ -339,6 +372,9 @@ function App() {
   const [importStatus, setImportStatus] = useState("");
   const [generatedPassword, setGeneratedPassword] = useState(generateStrongPassword());
   const [activeView, setActiveView] = useState("analyzer");
+  const [reportData, setReportData] = useState(null);
+  const [reportUploadStatus, setReportUploadStatus] = useState("");
+  const [reportError, setReportError] = useState("");
 
   const appendPasswordsToInput = (passwords) => {
     if (passwords.length === 0) {
@@ -442,6 +478,94 @@ function App() {
     setResult(analysis);
   };
 
+  const handleDownloadReport = useCallback(() => {
+    if (!result) return;
+
+    const report = {
+      generatedAt: new Date().toISOString(),
+      totalPasswords: result.totalPasswords,
+      mostCommonPattern: result.mostCommonPattern,
+      highestFrequency: result.highestFrequency,
+      patternFrequencyMap: result.patternFrequencyMap,
+      rows: result.rows.map((row) => ({
+        password: row.password,
+        pattern: row.pattern,
+        score: row.score,
+        strengthLabel: row.strengthLabel,
+        crackTime: row.crackTime,
+        entropyBits: row.entropyBits,
+        entropyLabel: row.entropyLabel,
+        weaknesses: row.weaknesses,
+        isCommonPassword: row.isCommonPassword,
+        isRisky: row.isRisky,
+        suggestion: row.suggestion,
+      })),
+    };
+
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `password-security-report-${Date.now()}.json`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [result]);
+
+  const handleReportUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    try {
+      const text = await readAsText(file);
+      const parsed = JSON.parse(text);
+
+      if (!parsed.rows || !Array.isArray(parsed.rows) || parsed.rows.length === 0) {
+        setReportError("Invalid report file. No password data found.");
+        setReportData(null);
+        setReportUploadStatus("");
+        return;
+      }
+
+      setReportData(parsed);
+      setReportError("");
+      setReportUploadStatus(`Loaded report with ${parsed.rows.length} password(s) — generated ${parsed.generatedAt ? new Date(parsed.generatedAt).toLocaleString() : "unknown date"}.`);
+    } catch {
+      setReportData(null);
+      setReportUploadStatus("");
+      setReportError("Failed to parse report. Please upload a valid JSON report file.");
+    }
+  };
+
+  const handleGenerateExcel = useCallback(() => {
+    if (!reportData) return;
+
+    const csv = generateCsvFromReport(reportData);
+    if (!csv) {
+      setReportError("No data to export.");
+      return;
+    }
+
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `password-report-${Date.now()}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+  }, [reportData]);
+
+  const handleClearReport = () => {
+    setReportData(null);
+    setReportUploadStatus("");
+    setReportError("");
+  };
+
   const handleClear = () => {
     setInputText("");
     setError("");
@@ -523,6 +647,13 @@ function App() {
           </button>
           <button
             type="button"
+            className={`navTabBtn ${activeView === "reportExcel" ? "active" : ""}`}
+            onClick={() => setActiveView("reportExcel")}
+          >
+            Report → Excel
+          </button>
+          <button
+            type="button"
             className={`navTabBtn ${activeView === "concept" ? "active" : ""}`}
             onClick={() => setActiveView("concept")}
           >
@@ -530,7 +661,7 @@ function App() {
           </button>
         </nav>
 
-        {activeView === "analyzer" ? (
+        {activeView === "analyzer" && (
           <>
             <section className="inputPanel">
               <label htmlFor="passwordInput" className="label">
@@ -597,6 +728,11 @@ function App() {
                 <button type="button" className="btn primary" onClick={handleAnalyze}>
                   Analyze Security
                 </button>
+                {result && (
+                  <button type="button" className="btn secondary downloadBtn" onClick={handleDownloadReport}>
+                    <span className="downloadIcon">⬇</span> Download Report
+                  </button>
+                )}
                 <button type="button" className="btn ghost" onClick={handleClear}>
                   Clear Input
                 </button>
@@ -752,7 +888,108 @@ function App() {
               </section>
             )}
           </>
-        ) : (
+        )}
+
+        {activeView === "reportExcel" && (
+          <section className="reportExcelPage">
+            <div className="reportExcelIntro">
+              <h2>Report → Excel Generator</h2>
+              <p>
+                Upload a previously downloaded JSON security report to generate a
+                downloadable Excel (CSV) file with existing passwords and suggested
+                stronger alternatives.
+              </p>
+            </div>
+
+            <div className="reportUploadZone">
+              <label className="uploadCard reportUploadCard" htmlFor="reportUpload">
+                <span className="uploadIcon">📄</span>
+                <span className="uploadTitle">Upload Security Report</span>
+                <span className="uploadHint">Select the .json report file downloaded from Analyzer</span>
+                <input
+                  id="reportUpload"
+                  type="file"
+                  className="fileInput"
+                  accept=".json"
+                  onChange={handleReportUpload}
+                />
+              </label>
+            </div>
+
+            {reportUploadStatus && <p className="importStatus">{reportUploadStatus}</p>}
+            {reportError && <p className="error">{reportError}</p>}
+
+            {reportData && (
+              <>
+                <div className="reportPreview">
+                  <div className="sectionHeader">
+                    <h3 className="sectionTitle">Report Preview</h3>
+                    <span className="statusChip">{reportData.rows.length} Passwords</span>
+                  </div>
+
+                  <div className="reportStatsRow">
+                    <div className="reportStatPill">
+                      <span className="reportStatLabel">Total</span>
+                      <strong>{reportData.totalPasswords}</strong>
+                    </div>
+                    <div className="reportStatPill">
+                      <span className="reportStatLabel">Risky</span>
+                      <strong className="dangerText">{reportData.rows.filter((r) => r.isRisky).length}</strong>
+                    </div>
+                    <div className="reportStatPill">
+                      <span className="reportStatLabel">Strong</span>
+                      <strong className="goodText">{reportData.rows.filter((r) => r.strengthLabel === "Strong").length}</strong>
+                    </div>
+                    <div className="reportStatPill">
+                      <span className="reportStatLabel">Generated</span>
+                      <strong>{reportData.generatedAt ? new Date(reportData.generatedAt).toLocaleDateString() : "—"}</strong>
+                    </div>
+                  </div>
+
+                  <div className="tableWrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Existing Password</th>
+                          <th>Strength</th>
+                          <th>Score</th>
+                          <th>Suggested Password</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.rows.map((row, idx) => (
+                          <tr key={`${row.password}-${idx}`} className={row.isRisky ? "riskyRow" : ""}>
+                            <td>{idx + 1}</td>
+                            <td className={row.isRisky ? "weakPassword" : ""}>{row.password}</td>
+                            <td>
+                              <span className={`strengthBadge ${strengthClassMap[row.strengthLabel]}`}>
+                                {row.strengthLabel}
+                              </span>
+                            </td>
+                            <td>{row.score}/100</td>
+                            <td className="suggestionText">{row.suggestion}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="actions reportActions">
+                  <button type="button" className="btn primary excelBtn" onClick={handleGenerateExcel}>
+                    <span className="excelIcon">📊</span> Download as Excel (CSV)
+                  </button>
+                  <button type="button" className="btn ghost" onClick={handleClearReport}>
+                    Clear Report
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+        )}
+
+        {activeView === "concept" && (
           <section className="conceptPage">
             <div className="conceptIntro">
               <h2>ADSA Concept Behind This Project</h2>
@@ -847,6 +1084,7 @@ function App() {
             </section>
           </section>
         )}
+
       </section>
     </main>
   );
