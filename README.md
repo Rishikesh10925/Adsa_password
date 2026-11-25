@@ -3,14 +3,17 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-1f8b4c)](#)
 [![Course](https://img.shields.io/badge/Course-ADSA-0a4ca8)](#adsa-concepts-implemented)
 
-A production-style security auditing web app built with React that analyzes password quality using **ADSA concepts**: hash maps, string processing, pattern analysis, entropy estimation, and complexity-aware design.
+A client-side security auditing web app built with React that analyzes password quality using **ADSA concepts**: hash maps, string processing, pattern analysis, entropy estimation, and complexity-aware design.
 
 This project is designed as both:
 - a practical cybersecurity utility
 - an academic ADSA demonstration with real-world relevance
+
+<p align="center">
+  <img src="docs/screenshots/analyzer.png" alt="Password Security Auditor: analyzer view with a batch of sample passwords" width="820">
+</p>
 
 ## Table Of Contents
 
@@ -94,6 +97,12 @@ Displays entropy in bits and classifies it into:
 - entropy insights
 - risk highlighting
 - responsive card-based design
+
+### 8. Reports
+- download the analysis as a JSON report
+- **Report → Excel** tab: load a saved JSON report and convert it to an Excel-compatible CSV
+
+Everything runs in the browser. No password is sent to a server.
 
 ## ADSA Concepts Implemented
 
@@ -192,15 +201,17 @@ Space:
 ## Project Structure
 
 ```text
-Adsa/
-  index.html
-  package.json
-  README.md
-  src/
-    App.js
-    App.jsx
-    main.jsx
-    index.css
+Adsa_password/
+├── index.html
+├── package.json
+├── vite.config.js
+├── docs/screenshots/        # README images
+└── src/
+    ├── main.jsx             # entry point
+    ├── App.jsx              # analyzer, report converter and concept page
+    ├── App.js               # re-export of App.jsx
+    ├── utils/patternUtils.js
+    └── index.css
 ```
 
 ## Getting Started
@@ -262,26 +273,20 @@ dist
 
 ## Screenshots
 
-Add screenshots after pushing:
-- Dashboard overview
-- Detailed table with entropy and weaknesses
-- ADSA concept page
+| Audit summary and pattern frequency | ADSA concept page |
+|---|---|
+| <img src="docs/screenshots/results.png" alt="Audit summary cards, pattern-frequency table and per-password review"> | <img src="docs/screenshots/adsa-concept.png" alt="In-app explanation of the data structures and algorithms used"> |
 
-Suggested naming:
-- docs/screenshots/dashboard.png
-- docs/screenshots/details.png
-- docs/screenshots/adsa-concept.png
+Screenshots use made-up sample passwords.
 
 ## Roadmap
 
 - sortable columns and advanced filters
-- report export (CSV/PDF)
+- PDF report export
 - reusable utility modules + unit tests
 - accessibility pass (keyboard and ARIA audit)
 - optional dark theme
 
 ## Author
 
-Rishikesh
-
-
+Built by [Rishikesh](https://github.com/Rishikesh10925).
